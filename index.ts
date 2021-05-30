@@ -13,7 +13,7 @@ exports.instanceIP = computeInstance.networkInterfaces.apply((networkInterface) 
 
 function createComputeInstance() {
   const network = new gcp.compute.Network('network')
-  const computeFirewall = new gcp.compute.Firewall('firewall', {
+  new gcp.compute.Firewall('firewall', {
     network: network.id,
     allows: [
       {
@@ -86,7 +86,7 @@ function createAlertPolicy(
   computeInstance: gcp.compute.Instance
 ) {
   return new gcp.monitoring.AlertPolicy('alertPolicy', {
-    combiner: 'OR',
+    combiner: 'AND_WITH_MATCHING_RESOURCE',
     conditions: [
       {
         conditionThreshold: {
@@ -119,10 +119,33 @@ function createAlertPolicy(
 }
 
 function createCloudFunction(pubSubTopic: gcp.pubsub.Topic, computeInstance: gcp.compute.Instance) {
-  pubSubTopic.onMessagePublished('onShutdownIdleInstance', {
-    runtime: 'nodejs14',
-    callback(data) {
-      console.log('hey I am shutting you down baby.')
-    },
+  computeInstance.instanceId.apply((instanceId) => {
+    pubSubTopic.onMessagePublished('onShutdownIdleInstance', {
+      runtime: 'nodejs14',
+      callbackFactory: () => {
+        const Compute = require('@google-cloud/compute')
+        const compute = new Compute()
+        return (message) => {
+          const messageData =
+            message.data && JSON.parse(Buffer.from(message.data, 'base64').toString())
+          if (messageData?.incident?.state === 'open') {
+            shutdownInstance()
+          }
+
+          async function shutdownInstance() {
+            // https://cloud.google.com/scheduler/docs/start-and-stop-compute-engine-instances-on-a-schedule#set_up_the_functions_with
+            const [vms] = await compute.getVMs({ filter: `id eq ${instanceId}` })
+            await Promise.all(
+              vms.map(async (instance: any) => {
+                const [operation] = await instance.stop()
+
+                // Operation pending
+                return operation.promise()
+              })
+            )
+          }
+        }
+      },
+    })
   })
 }
