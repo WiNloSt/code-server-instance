@@ -7,5 +7,12 @@
         "@google-cloud/compute": "^2.5.0",
         "@pulumi/gcp": "^5.0.0",
         "@pulumi/pulumi": "^3.0.0"
+    },
+    "scripts": {
+        "gcloud": "docker run --rm -ti --volumes-from gcloud-config --mount type=bind,source=$(pwd),target=/app --workdir /app google/cloud-sdk gcloud",
+        "gcloud:init": "docker run -ti --name gcloud-config google/cloud-sdk gcloud",
+        "gcloud:login": "yarn gcloud auth login",
+        "gcloud:set-project": "yarn gcloud config set project code-server-instance",
+        "deploy-function": "yarn gcloud functions deploy startCodeServer --runtime=nodejs14 --allow-unauthenticated --trigger-http --region=us-central1 --source=functions"
     }
 }
